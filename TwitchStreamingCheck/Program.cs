@@ -28,7 +28,6 @@ namespace TwitchStreamingCheck
                 Info info = JsonConvert.DeserializeObject<Info>(s);
                 token = info.Token;
                 client_id = info.Client_Id;
-                id = info.Id;
             }
             catch(Exception ex)
             {
@@ -38,10 +37,11 @@ namespace TwitchStreamingCheck
                 Environment.Exit(0);
             }            
         }
+        
         static async void Run()
         {
             List<string> followed = new List<string>();
-            string query = "";
+            StringBuilder sb = new StringBuilder();
             using (HttpClient client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Clear();
@@ -49,6 +49,18 @@ namespace TwitchStreamingCheck
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
                 client.DefaultRequestHeaders.Add("Client-Id", client_id);
 
+                #region 圖奇帳號轉ID
+                Console.Write("輸入帳號:");
+                string login = Console.ReadLine();
+                using (HttpResponseMessage response = await client.GetAsync($"https://api.twitch.tv/helix/users?login={login}"))
+                {
+                    string s = await response.Content.ReadAsStringAsync();
+                    dynamic jo = JObject.Parse(s);
+                    var list = ((JArray)jo.data).Cast<dynamic>().ToList();
+                    id = list[0].id;
+                }
+                #endregion
+                
                 #region 取得追隨頻道前100
                 using (HttpResponseMessage response = await client.GetAsync($"https://api.twitch.tv/helix/users/follows?from_id={id}&first=100"))
                 {
@@ -58,17 +70,17 @@ namespace TwitchStreamingCheck
                     if (total > 0)                  //將追隨清單轉換成QueryString
                     {
                         var list = ((JArray)jo.data).Cast<dynamic>().ToList();
-                        query += $"user_login={(string)list[0].to_login}";
+                        sb.Append($"user_login={(string)list[0].to_login}");
                         for (int i = 1; i < total; i++)
                         {
-                            query += $"&user_login={(string)list[i].to_login}";
+                            sb.Append($"&user_login={(string)list[i].to_login}");
                         }
                     }                    
                 }
                 #endregion
 
                 #region 取得直播中的追隨頻道 無追隨則取得Top20
-                using (HttpResponseMessage response=await client.GetAsync($"https://api.twitch.tv/helix/streams?{query}"))
+                using (HttpResponseMessage response=await client.GetAsync($"https://api.twitch.tv/helix/streams?{sb.ToString()}"))
                 {
                     string s = await response.Content.ReadAsStringAsync();
                     dynamic jo = JObject.Parse(s);
